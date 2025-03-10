@@ -2,7 +2,6 @@ import os
 import h5py
 import numpy as np
 
-
 #-------------------------------------------------------------------------------#
 # This function reads the coordinate information from the 
 # cord_info.h5 file which stores the coordinate information as a dictionary.
@@ -25,6 +24,7 @@ def read_cord_info(directory_path, file_extension='.h5', specific_file_name=None
 
 #-------------------------------------------------------------------------------#
 # This function reads data from the h5 file within the outputdir/fields folder
+# works best when the h5 file only has one dataset usually named var
 #-------------------------------------------------------------------------------#
 def read_h5_file_fields(file_path):
     with h5py.File(file_path, 'r') as h5_file:
@@ -48,7 +48,7 @@ def generate_time_and_files_fields(SAVE_3D, t_time):
 #-------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------#
-# Obtain data from the means.h5 file
+# Obtain data from the means.h5 file (helpful since the file has multiple groups)
 #-------------------------------------------------------------------------------#
 def extract_data_from_group(file_path, group_name):
     """
@@ -77,7 +77,7 @@ def extract_data_from_group(file_path, group_name):
 #-------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------#
-# Calculate the root mean square fluctuations
+# Calculate the root mean square fluctuations from the means file
 #-------------------------------------------------------------------------------#
 def calculate_rms_fluctuations(data_mean, data_rms):
     # Ensure the keys are the same in both dictionaries
@@ -89,7 +89,7 @@ def calculate_rms_fluctuations(data_mean, data_rms):
 #-------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------#
-# Calculate interface height
+# Calculate the average interface height from the means file
 #-------------------------------------------------------------------------------#
 def calc_interface_height(phibar, xmr):
     # Obtain list of keys
@@ -106,7 +106,7 @@ def calc_interface_height(phibar, xmr):
 #-------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------#
-# Calculate effective Rayleigh number
+# Calculate effective Rayleigh number from the means file
 #-------------------------------------------------------------------------------#
 def calc_effective_rayleigh(hbar, ra_final):
     # Calculate the Rayleigh number
@@ -117,7 +117,7 @@ def calc_effective_rayleigh(hbar, ra_final):
 #-------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------#
-# Calculate effective Ekman number
+# Calculate effective Ekman number from the means file
 #-------------------------------------------------------------------------------#
 def calc_effective_ekman_number(hbar, Rossby_final, Ra_final, Pr):
     # first calculate the Ekman number
@@ -130,7 +130,7 @@ def calc_effective_ekman_number(hbar, Rossby_final, Ra_final, Pr):
 #-------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------#
-# Calulate the effective Rossby number
+# Calulate the effective Rossby number from the means file
 #-------------------------------------------------------------------------------#
 def calc_effective_rossby_number(ek_eff, ra_eff, Pr):
     # Calculate the effective Rossby number
@@ -141,15 +141,128 @@ def calc_effective_rossby_number(ek_eff, ra_eff, Pr):
 #-------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------#
+# Calculate the interface position (2D) from the fields files
+#-------------------------------------------------------------------------------#
+def calc_interface_position_2d(phi, hori, vert):
+    # Center around 0.0
+    phi = phi - 0.5
+    phi_2d = phi[0, :, :]
+    vert_sign_change = np.zeros(len(hori))
+    for j in range(len(hori)):
+        for i in range(len(vert)):
+            if phi_2d[j, i] > 0.0:
+                vert_sign_change[j] = vert[i]
+                break
+
+    return hori, vert_sign_change
+#-------------------------------------------------------------------------------#
+
+#-------------------------------------------------------------------------------#
+# Calculate the interface position (3D) from the fields files
+#-------------------------------------------------------------------------------#
+def calc_interface_position_3d(phi, hor1, hor2, vert):
+    # Center around 0.0
+    phi = phi - 0.5
+    vert_sign_change = np.zeros((len(hor1), len(hor2)))
+    for k in range(len(hor1)):
+        for j in range(len(hor2)):
+            for i in range(len(vert)):
+                if phi[k, j, i] > 0.0:
+                    vert_sign_change[k, j] = vert[i]
+                    break
+    
+    return hor1, hor2, vert_sign_change
+#-------------------------------------------------------------------------------#
+
+#-------------------------------------------------------------------------------#
 # Calculate the Nusselt number
 #-------------------------------------------------------------------------------#
 #### INSERT SUBROUTINE HERE ####
 #-------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------#
-# Calculate fft for 3d fields
+# Calculate fft for 1d signal
 #-------------------------------------------------------------------------------#
-#### INSERT SUBROUTINE HERE ####
+def fft_1d_signal(indep_variable, dep_variable):
+    fft_y = np.fft.fft(dep_variable)
+    fft_C = np.conjugate(fft_y)
+    fft_magnitude = np.abs(fft_y*fft_C)
+    frequencies = np.fft.fftfreq(len(indep_variable), 1/len(indep_variable))
+    Np = len(indep_variable)
+    Ener = np.zeros((Np))
+    for col in range(Np):
+        Ener[col] =  fft_magnitude[col]
+    halfSpec = int(Np/2)
+    Ek = Ener[1:halfSpec]/Np
+    kvec_h = (frequencies[1:halfSpec])
+    return kvec_h, Ek
+#-------------------------------------------------------------------------------#
+
+#-------------------------------------------------------------------------------#
+# Calculate the dominant wavenumber and wavelength for the 1d signal
+#-------------------------------------------------------------------------------#
+def calc_dom_wavenumber_wavelength_1d(kvec_h, Ek, L):
+    num_integrand_integL = np.multiply(Ek,np.reciprocal(kvec_h))
+    num_integrand_domK = np.multiply(Ek,kvec_h)
+    
+    def mytrapz(xvar,yvar):
+        svar = np.zeros(len(xvar))
+        for i in range(0,len(xvar)-1):
+            svar[i] =  (xvar[i+1]-xvar[i])*(yvar[i]+yvar[i+1])/2
+        intgVar =  np.sum(svar)
+        return intgVar
+    numer_domK =  mytrapz(kvec_h,num_integrand_domK)
+    denom = mytrapz(kvec_h,Ek)
+    domK = numer_domK/denom
+    domL = L/domK
+    return domK, domL
+#-------------------------------------------------------------------------------#
+
+#-------------------------------------------------------------------------------#
+# Calculate fft for 2d signal
+#-------------------------------------------------------------------------------#
+def fft_2d_signal(indep_variable1, indep_variable2, dep_variable):
+    if dep_variable.shape != (len(indep_variable1), len(indep_variable2)):
+        raise ValueError("Shape of dep_variable must match the sizes of indep_variable1 and indep_variable2.")
+    
+    dep_fft = np.fft.fft2(dep_variable)
+    dep_fft_shifted = np.fft.fftshift(dep_fft)
+    power_spectrum = np.abs(dep_fft_shifted)**2
+    sample_period1 = abs(indep_variable1[1] - indep_variable1[0])
+    sample_period2 = abs(indep_variable2[1] - indep_variable2[0])
+    power_spectrum_normalized = power_spectrum / (len(indep_variable1) * len(indep_variable2))
+    freq_h1 = np.fft.fftshift(np.fft.fftfreq(len(indep_variable1), sample_period1))
+    freq_h2 = np.fft.fftshift(np.fft.fftfreq(len(indep_variable2), sample_period2))
+    wavenumber_h1 = np.abs(freq_h1)
+    wavenumber_h2 = np.abs(freq_h2)
+    half_spec_h1 = len(indep_variable1) // 2
+    half_spec_h2 = len(indep_variable2) // 2
+
+    power_first_quadrant = power_spectrum_normalized[half_spec_h1:, half_spec_h2:]
+    kvec_h1 = wavenumber_h1[half_spec_h1:]
+    kvec_h2 = wavenumber_h2[half_spec_h2:]
+
+    h1_profile = power_first_quadrant[0, :]
+    h2_profile = power_first_quadrant[:, 0]
+    power_first_quadrant[0, :] = 0.0
+    power_first_quadrant[:, 0] = 0.0
+
+    #return kvec_h1, h1_profile, kvec_h2, h2_profile
+    return power_first_quadrant, kvec_h1, kvec_h2
+#-------------------------------------------------------------------------------#
+
+#-------------------------------------------------------------------------------#
+# Calculate the dominant wavenumber and wavelength for the 2d signal
+#  (works best for periodic boundary conditions and when the domain is equal in
+#   both directions)
+#-------------------------------------------------------------------------------#
+def calc_dom_wavenumber_wavelength_2d(power_spectrum, kvec_h1, kvec_h2,Lx,Ly):
+    max_idx = np.unravel_index(np.argmax(power_spectrum, axis=None), power_spectrum.shape)
+    dom_kvec_h1 = kvec_h1[max_idx[0]]
+    dom_kvec_h2 = kvec_h2[max_idx[1]]
+    dom_WN_global = np.sqrt((dom_kvec_h1/Lx)**2 + (dom_kvec_h2/Ly)**2)
+    dom_WL_global = 1.0/dom_WN_global
+    return dom_WN_global, dom_WL_global
 #-------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------#
@@ -184,3 +297,5 @@ def save_data_to_text(folder_path, file_name, num_columns, headers, *arrays):
         f.write('\t'.join(headers) + '\n')
         # Write data
         np.savetxt(f, data, delimiter='\t', fmt='%s')
+#-------------------------------------------------------------------------------#
+
