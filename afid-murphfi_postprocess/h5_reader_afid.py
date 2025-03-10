@@ -171,7 +171,9 @@ def calc_interface_position_3d(phi, hor1, hor2, vert):
                     vert_sign_change[k, j] = vert[i]
                     break
     
-    return hor1, hor2, vert_sign_change
+    hbar = np.mean(vert_sign_change)
+
+    return hor1, hor2, vert_sign_change, hbar
 #-------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------#
