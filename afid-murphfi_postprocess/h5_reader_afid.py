@@ -265,7 +265,7 @@ def calc_dom_wavenumber_wavelength_2d(power_spectrum, kvec_h1, kvec_h2,Lx,Ly):
 # Calculate the Flux for temperature
 #-------------------------------------------------------------------------------#
 def calc_Tflux(T, dx):
-    Tflux = T[:,:,0] - T[:,:,1]
+    Tflux = T[:,:,1] - T[:,:,0]
     Tflux = Tflux/dx
     return Tflux
 #-------------------------------------------------------------------------------#
