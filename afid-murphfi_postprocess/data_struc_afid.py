@@ -7,6 +7,7 @@ class data_struc_fields:
         self._vy = None
         self._vz = None
         self._phi = None
+        self._tempr = None
         self.cord_info = {}
 
     #-----------------------------------------------------------------#
@@ -45,6 +46,16 @@ class data_struc_fields:
     @temp.deleter
     def temp(self):
         del self._temp
+    # temperature variable (tempr)
+    @property
+    def tempr(self):
+        return self._tempr
+    @tempr.setter
+    def tempr(self, value):
+        self._tempr = value
+    @tempr.deleter
+    def tempr(self):
+        del self._tempr
     # velocity variables (vx, vy, vz)
     @property
     def vx(self):
