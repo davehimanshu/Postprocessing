@@ -24,13 +24,15 @@ def read_cord_info(directory_path, file_extension='.h5', specific_file_name=None
 
 #-------------------------------------------------------------------------------#
 # This function reads data from the h5 file within the outputdir/fields folder
-# works best when the h5 file only has one dataset usually named var
+# Allows specifying which dataset to read from the file
 #-------------------------------------------------------------------------------#
-def read_h5_file_fields(file_path):
+def read_h5_file_fields(file_path, dataset_name=None):
     with h5py.File(file_path, 'r') as h5_file:
-        # Get the first (and only) dataset name
-        dataset_name = list(h5_file.keys())[0]
-        # Get the data
+        if dataset_name is None:
+            # Get the first (and only) dataset name
+            dataset_name = list(h5_file.keys())[0]
+        if dataset_name not in h5_file:
+            raise KeyError(f"Dataset '{dataset_name}' not found in file '{file_path}'")
         data = h5_file[dataset_name][:]
         return data
 #-------------------------------------------------------------------------------#
@@ -155,6 +157,19 @@ def calc_interface_position_2d(phi, hori, vert):
                 break
 
     return hori, vert_sign_change
+#-------------------------------------------------------------------------------#
+
+#-------------------------------------------------------------------------------#
+# Calculate the total liquid volume from the fields files
+#-------------------------------------------------------------------------------#
+def calc_total_liquid_volume(phi, cell_volume):
+    # Center around 0.0
+    phi_centered = phi - 0.5
+    # Count number of cells where phi < 0 (liquid region)
+    num_liquid_cells = np.sum(phi_centered < 0)
+    # Total liquid volume
+    total_liquid_volume = num_liquid_cells * cell_volume
+    return total_liquid_volume
 #-------------------------------------------------------------------------------#
 
 #-------------------------------------------------------------------------------#
@@ -304,3 +319,14 @@ def save_data_to_text(folder_path, file_name, num_columns, headers, *arrays):
         np.savetxt(f, data, delimiter='\t', fmt='%s')
 #-------------------------------------------------------------------------------#
 
+#-------------------------------------------------------------------------------#
+# Calculate the heat flux from the means file
+#-------------------------------------------------------------------------------#
+def calc_Nu_means(Tbar,hbar,xmr):
+    # Obtain list of keys
+    keys = list(Tbar.keys())
+    result = np.zeros(len(keys))
+    for key in keys:
+        #result[keys.index(key)] = ((1.0 - Tbar[key][0])/xmr[0])* hbar[keys.index(key)]
+        result[keys.index(key)] = ((Tbar[key][0] - Tbar[key][1])/(xmr[1] - xmr[0]))* hbar[keys.index(key)]
+    return result
